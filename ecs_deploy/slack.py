@@ -77,7 +77,7 @@ class SlackNotification(object):
 
         return response
 
-    def notify_success(self, cluster, revision, service=None, rule=None):
+    def notify_success(self, cluster, revision, service=None, rule=None, commitMessage=None, buildNumber=None):
         if not self.__url or not self.__service_match_re.search(service or rule):
             return
 
@@ -94,6 +94,10 @@ class SlackNotification(object):
 
         messages.append(('Revision', revision))
         messages.append(('Duration', str(duration)))
+        if commitMessage:
+          messages.append(('Commit', commitMessage))
+        if buildNumber:
+          messages.append(('Build', buildNumber))
 
         payload = self.get_payload('Deployment finished successfully', messages, 'good')
 
@@ -128,3 +132,29 @@ class SlackNotification(object):
             raise SlackException('Notifying deployment failed')
 
         return response
+
+    def notify_update_success(self, cluster, revision, service=None, commitMessage=None, buildNumber=None):
+        if not self.__url or not self.__service_match_re.search(service):
+            return
+
+        messages = [
+            ('Cluster', cluster),
+        ]
+
+        if service:
+            messages.append(('Service', service))
+
+        messages.append(('Revision', revision))
+
+        if commitMessage:
+          messages.append(('Commit', commitMessage))
+
+        if buildNumber:
+          messages.append(('Build', buildNumber))
+
+        payload = self.get_payload('Update task definition finished successfully', messages, 'good')
+
+        response = requests.post(self.__url, json=payload)
+
+        if response.status_code != 200:
+            raise SlackException('Notifying update failed')

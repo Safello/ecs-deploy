@@ -125,7 +125,7 @@ def deploy(cluster, service, tag, image, command, health_check, cpu, memory, mem
             getenv('SLACK_URL', slack_url),
             getenv('SLACK_SERVICE_MATCH', slack_service_match)
         )
-        slack.notify_start(cluster, tag, td, comment, user, service=service)
+        # slack.notify_start(cluster, tag, td, comment, user, service=service)
 
         click.secho('Deploying based on task definition: %s\n' % td.family_revision)
 
@@ -158,8 +158,10 @@ def deploy(cluster, service, tag, image, command, health_check, cpu, memory, mem
                 raise
 
         record_deployment(tag, newrelic_apikey, newrelic_appid, newrelic_region, newrelic_revision, comment, user)
+        commitMessage = getenv('ECS_COMMIT_MESSAGE')
+        buildNumber = getenv('ECS_BUILD_NUMBER')
 
-        slack.notify_success(cluster, td.revision, service=service)
+        slack.notify_success(cluster, td.revision, service=service,  commitMessage=commitMessage, buildNumber=buildNumber)
 
     except (EcsError, NewRelicException) as e:
         click.secho('%s\n' % str(e), fg='red', err=True)
@@ -301,7 +303,9 @@ def cron(cluster, task, rule, image, tag, command, cpu, memory, memoryreservatio
 @click.option('--exclusive-docker-labels', is_flag=True, default=False, help='Set the given docker labels exclusively and remove all other pre-existing docker-labels from all containers')
 @click.option('--exclusive-s3-env-file', is_flag=True, default=False, help='Set the given s3 env files exclusively and remove all other pre-existing s3 env files from all containers')
 @click.option('--deregister/--no-deregister', default=True, help='Deregister or keep the old task definition (default: --deregister)')
-def update(task, image, tag, command, env, env_file, s3_env_file, secret, role, region, access_key_id, secret_access_key, profile, diff, exclusive_env, exclusive_s3_env_file, exclusive_secrets, runtime_platform, deregister, docker_label, exclusive_docker_labels):
+@click.option('--slack-url', required=False, help='Webhook URL of the Slack integration. Can also be defined via environment variable SLACK_URL')
+@click.option('--slack-service-match', default=".*", required=False, help='A regular expression for defining, which services should be notified. (default: .* =all). Can also be defined via environment variable SLACK_SERVICE_MATCH')
+def update(task, image, tag, command, env, env_file, s3_env_file, secret, role, region, access_key_id, secret_access_key, profile, diff, exclusive_env, exclusive_s3_env_file, exclusive_secrets, runtime_platform, deregister, docker_label, exclusive_docker_labels, slack_url, slack_service_match):
     """
     Update a task definition.
 
@@ -324,6 +328,11 @@ def update(task, image, tag, command, env, env_file, s3_env_file, secret, role, 
         td.set_role_arn(role)
         td.set_runtime_platform(runtime_platform)
 
+        slack = SlackNotification(
+            getenv('SLACK_URL', slack_url),
+            getenv('SLACK_SERVICE_MATCH', slack_service_match)
+        )
+
         if diff:
             print_diff(td)
 
@@ -331,6 +340,12 @@ def update(task, image, tag, command, env, env_file, s3_env_file, secret, role, 
 
         if deregister:
             deregister_task_definition(action, td)
+
+        commitMessage = getenv('ECS_COMMIT_MESSAGE')
+        buildNumber = getenv('ECS_BUILD_NUMBER')
+        cluster = getenv('ECS_CLUSTER')
+
+        slack.notify_update_success(cluster, td.revision, task, commitMessage=commitMessage, buildNumber=buildNumber)
 
     except EcsError as e:
         click.secho('%s\n' % str(e), fg='red', err=True)
